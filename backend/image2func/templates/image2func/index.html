@@ -1,0 +1,1308 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image to Function - 图片/视频转函数绘图</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f0f2f5; color: #333; min-height: 100vh;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white; padding: 24px 0; text-align: center;
+        }
+        .header h1 { font-size: 28px; font-weight: 600; }
+        .header p { margin-top: 8px; opacity: 0.9; font-size: 15px; }
+        .container { max-width: 1200px; margin: 32px auto; padding: 0 20px; }
+        .card {
+            background: white; border-radius: 10px;
+            box-shadow: 0 1px 6px rgba(0,0,0,0.06);
+            padding: 16px 20px; margin-bottom: 12px;
+        }
+        .card h2 { font-size: 16px; margin-bottom: 10px; color: #444; }
+        .upload-zone {
+            border: 2px dashed #ccc; border-radius: 12px;
+            padding: 40px 20px; text-align: center; cursor: pointer;
+            transition: all 0.3s; background: #fafafa;
+        }
+        .upload-zone:hover, .upload-zone.dragover { border-color: #667eea; background: #f0f2ff; }
+        .upload-zone.has-image { border-color: #52c41a; background: #f6ffed; }
+        .upload-zone .icon { font-size: 48px; margin-bottom: 12px; display: block; }
+        .upload-zone .text { font-size: 15px; color: #666; }
+        .upload-zone .subtext { font-size: 13px; color: #999; margin-top: 6px; }
+        .upload-zone img.preview {
+            max-width: 100%; max-height: 300px; object-fit: contain; border-radius: 8px;
+        }
+        .file-type-toggle {
+            display: flex; gap: 8px; margin-bottom: 16px; justify-content: center;
+        }
+        .file-type-toggle button {
+            padding: 6px 20px; border: 1px solid #d9d9d9; border-radius: 20px;
+            background: white; cursor: pointer; font-size: 14px; transition: all 0.2s;
+        }
+        .file-type-toggle button.active {
+            background: #667eea; color: white; border-color: #667eea;
+        }
+        .params-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+        }
+        .param-item label {
+            display: flex; align-items: center; gap: 6px;
+            font-size: 13px; font-weight: 500; color: #555; margin-bottom: 6px;
+        }
+        .param-item .hint {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 16px; height: 16px; border-radius: 50%;
+            background: #ddd; color: #666; font-size: 11px; font-weight: 600;
+            cursor: help; flex-shrink: 0; transition: background 0.2s;
+        }
+        .param-item .hint:hover { background: #667eea; color: white; }
+        .param-desc { font-size: 12px; color: #999; margin-top: 4px; line-height: 1.4; }
+        .param-item input, .param-item select {
+            width: 100%; padding: 8px 12px; border: 1px solid #d9d9d9;
+            border-radius: 6px; font-size: 14px; transition: border-color 0.3s;
+        }
+        .param-item input:focus, .param-item select:focus {
+            outline: none; border-color: #667eea;
+            box-shadow: 0 0 0 2px rgba(102,126,234,0.2);
+        }
+        .cpu-info {
+            font-size: 11px; color: #888; margin-top: 4px;
+        }
+        .cpu-info .cores { color: #667eea; font-weight: 600; }
+        .cpu-info .mem { color: #52c41a; font-weight: 600; }
+        .loading .progress-detail {
+            color: #667eea; font-size: 13px; margin-top: 8px;
+            font-weight: 500;
+        }
+        .loading .timer {
+            color: #999; font-size: 13px; margin-top: 6px;
+            font-family: 'Cascadia Code', monospace;
+        }
+        .loading .timer .elapsed { color: #667eea; font-weight: 600; }
+        .btn {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 10px 28px; border: none; border-radius: 8px;
+            font-size: 15px; font-weight: 500; cursor: pointer;
+            transition: all 0.3s;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102,126,234,0.4);
+        }
+        .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+        .btn-row { display: flex; justify-content: center; margin-top: 20px; gap: 12px; }
+        .loading { display: none; text-align: center; padding: 40px 0; }
+        .loading.active { display: block; }
+        .spinner {
+            width: 40px; height: 40px; border: 3px solid #e8e8e8;
+            border-top-color: #667eea; border-radius: 50%;
+            animation: spin 0.8s linear infinite; margin: 0 auto 12px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loading .text { color: #666; font-size: 14px; }
+        .loading .timer {
+            color: #999; font-size: 13px; margin-top: 6px;
+            font-family: 'Cascadia Code', monospace;
+        }
+        .result-placeholder { display: none; }
+        .result-placeholder.active { display: block; }
+
+        .result-layout {
+            display: flex;
+            gap: 0;
+            position: relative;
+        }
+        .left-panel {
+            display: flex; flex-direction: column; gap: 8px;
+            min-width: 200px;
+            width: 280px;
+            flex-shrink: 0;
+        }
+        .right-panel {
+            display: flex; flex-direction: column; gap: 8px;
+            flex: 1;
+            min-width: 0;
+        }
+        .resizer {
+            width: 6px;
+            background: #e0e0e0;
+            cursor: col-resize;
+            flex-shrink: 0;
+            transition: background 0.2s;
+            border-radius: 3px;
+            margin: 0 4px;
+        }
+        .resizer:hover, .resizer.dragging {
+            background: #667eea;
+        }
+
+        .canvas-wrap {
+            position: relative; width: 100%; user-select: none;
+            background: #fafafa; border-radius: 6px; border: 1px solid #eee;
+            overflow: hidden;
+            display: flex; align-items: center; justify-content: center;
+            min-height: 120px;
+        }
+        .canvas-wrap canvas {
+            display: block;
+            border-radius: 6px; cursor: grab;
+            max-width: 100%;
+        }
+        .canvas-wrap canvas:active { cursor: grabbing; }
+        .canvas-loading {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(250,250,250,0.9);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 5;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+        }
+        .canvas-loading.active {
+            opacity: 1;
+            pointer-events: all;
+        }
+        .canvas-loading .loading-spinner {
+            width: 32px; height: 32px;
+            border: 3px solid #e8e8e8;
+            border-top-color: #667eea;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        .canvas-loading .loading-text {
+            margin-top: 8px;
+            font-size: 12px;
+            color: #888;
+        }
+        .canvas-tooltip {
+            position: absolute; display: none;
+            background: rgba(0,0,0,0.85); color: white;
+            padding: 6px 10px; border-radius: 6px;
+            font-size: 12px; pointer-events: none; white-space: nowrap;
+            z-index: 10; line-height: 1.4;
+        }
+        .canvas-tooltip.visible { display: block; }
+        .canvas-controls {
+            display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+            margin-top: 6px;
+        }
+        .canvas-controls button {
+            padding: 3px 10px; border: 1px solid #d9d9d9; border-radius: 4px;
+            background: white; cursor: pointer; font-size: 11px; transition: all 0.2s;
+        }
+        .canvas-controls button:hover { border-color: #667eea; color: #667eea; }
+        .canvas-controls .zoom-info { font-size: 11px; color: #888; margin-left: 6px; }
+        .video-controls {
+            display: flex; align-items: center; gap: 8px;
+            padding: 6px 10px;
+            background: #f8f9ff; border-radius: 6px;
+            margin-top: 6px;
+        }
+        .video-controls button {
+            padding: 4px 12px; border: none; border-radius: 4px;
+            background: #667eea; color: white; cursor: pointer;
+            font-size: 12px; font-weight: 500; transition: all 0.2s;
+        }
+        .video-controls button:hover { background: #5a6fd6; }
+        .video-controls button:disabled { background: #ccc; cursor: not-allowed; }
+        .video-controls .progress-wrap {
+            flex: 1; display: flex; align-items: center; gap: 6px;
+        }
+        .video-controls input[type="range"] {
+            flex: 1; cursor: pointer;
+        }
+        .video-controls .frame-info {
+            font-size: 12px; color: #666; min-width: 60px; text-align: right;
+        }
+        .speed-control {
+            display: flex; align-items: center; gap: 4px;
+            margin-left: 4px;
+        }
+        .speed-control label {
+            font-size: 11px; color: #888;
+        }
+        .speed-control select {
+            padding: 2px 6px; border: 1px solid #d9d9d9; border-radius: 4px;
+            font-size: 11px; background: white; cursor: pointer;
+        }
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+        }
+        .summary-item {
+            background: #f8f9ff; border-radius: 6px; padding: 8px 6px; text-align: center;
+        }
+        .summary-item .value { font-size: 16px; font-weight: 600; color: #667eea; }
+        .summary-item .label { font-size: 10px; color: #888; margin-top: 2px; }
+        .function-list {
+            max-height: 420px; overflow-y: auto;
+            font-size: 11px; line-height: 1.4;
+            overflow-x: hidden;
+        }
+        .function-list .legend-item {
+            display: flex; align-items: center; gap: 6px;
+            padding: 3px 6px; border-bottom: 1px solid #f0f0f0;
+            cursor: pointer; transition: background 0.15s; border-radius: 3px;
+            height: 28px;
+            min-height: 28px;
+            max-height: 28px;
+            overflow: hidden;
+            white-space: nowrap;
+        }
+        .function-list .legend-item:hover { background: #f8f9ff; }
+        .function-list .legend-item.active { background: #f0f2ff; }
+        .function-list .legend-swatch {
+            width: 16px; height: 2px; border-radius: 2px; flex-shrink: 0;
+        }
+        .function-list .legend-label {
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .function-list code {
+            font-family: 'Cascadia Code', 'Consolas', 'Courier New', monospace;
+            font-size: 10px; background: #f5f5f5; padding: 1px 3px;
+            border-radius: 3px;
+            white-space: nowrap;
+        }
+        .hide { display: none; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1>Image to Function</h1>
+    <p>上传图片/视频 → 提取特征线条 → 生成数学函数 → 实时 Canvas 渲染</p>
+</div>
+
+<div class="container">
+
+    <div class="card">
+        <h2>上传文件</h2>
+        <div class="file-type-toggle">
+            <button class="active" id="btnImage" onclick="setFileType('image')">图片</button>
+            <button id="btnVideo" onclick="setFileType('video')">视频</button>
+        </div>
+        <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+            <div id="uploadPlaceholder">
+                <span class="icon" id="uploadIcon">🖼️</span>
+                <div class="text" id="uploadText">点击或将图片拖拽到这里</div>
+                <div class="subtext" id="uploadSubtext">支持 JPG / PNG / BMP 格式</div>
+            </div>
+            <img id="imagePreview" class="preview hide" />
+        </div>
+        <input type="file" id="fileInput" accept="image/*" style="display:none" />
+    </div>
+
+    <div class="card">
+        <h2>参数调节</h2>
+        <div class="params-grid">
+            <div class="param-item">
+                <label>最小轮廓长度<span class="hint" title="值越大，越小的细节线条会被忽略，只保留主要轮廓">?</span></label>
+                <input type="number" id="minLength" value="50" min="10" max="500" />
+                <div class="param-desc">过滤掉长度小于该值的噪点线条。增大可减少杂线。</div>
+            </div>
+            <div class="param-item">
+                <label>平滑度<span class="hint" title="值越大，拟合出的曲线越平滑，但会损失一些细节">?</span></label>
+                <input type="number" id="smoothing" value="5" min="0" max="50" step="0.5" />
+                <div class="param-desc">控制函数曲线的平滑程度。越大线条越圆滑，越小越贴合原图。</div>
+            </div>
+            <div class="param-item">
+                <label>最大轮廓数<span class="hint" title="限制生成函数的数量，避免过多函数导致绘图杂乱">?</span></label>
+                <input type="number" id="maxContours" value="50" min="1" max="200" />
+                <div class="param-desc">最多生成的函数数量。只保留最长的前 N 条轮廓。</div>
+            </div>
+            <div class="param-item hide" id="fpsParam">
+                <label>视频抽帧数 (FPS)<span class="hint" title="每秒抽取的帧数，不能超过视频原始帧率">?</span></label>
+                <input type="number" id="targetFps" value="3" min="1" max="60" />
+                <div class="param-desc">每秒抽取的帧数。值越大动画越流畅，处理时间越长。</div>
+            </div>
+            <div class="param-item hide" id="workerParam">
+                <label>CPU 进程数<span class="hint" title="并行处理的进程数量，建议不超过 CPU 核心数">?</span></label>
+                <input type="number" id="numWorkers" value="4" min="1" max="64" />
+                <div class="cpu-info" id="cpuInfo">检测中...</div>
+            </div>
+            <div class="param-item hide" id="memParam">
+                <label>内存限制 (%)<span class="hint" title="限制处理使用的最大内存百分比，防止系统卡顿">?</span></label>
+                <input type="number" id="memLimit" value="50" min="10" max="100" step="10" />
+                <div class="cpu-info" id="memInfo">检测中...</div>
+            </div>
+            <div class="param-item hide" id="downsampleParam">
+                <label>降采样比例<span class="hint" title="处理前缩小图片比例，越小速度越快，1.0为原分辨率">?</span></label>
+                <input type="number" id="downsample" value="0.5" min="0.1" max="1.0" step="0.1" />
+                <div class="param-desc">0.5=半分辨率，处理快4倍。结果仍显示原分辨率。</div>
+            </div>
+        </div>
+        <div class="btn-row">
+            <button class="btn btn-primary" id="processBtn" onclick="processFile()">开始处理</button>
+        </div>
+    </div>
+
+    <div class="loading" id="loadingIndicator">
+        <div class="spinner"></div>
+        <div class="text">正在处理，请稍候...</div>
+        <div class="progress-detail" id="loadingProgress"></div>
+        <div class="timer" id="loadingTimer">已用时: <span class="elapsed">0.0s</span></div>
+    </div>
+
+    <div class="result-placeholder" id="resultArea">
+        <div class="card">
+            <h2>处理结果</h2>
+            <div class="summary-grid" id="summaryContainer"></div>
+        </div>
+        <div class="result-layout" id="resultLayout">
+            <div class="left-panel" id="leftPanel">
+                <div class="card">
+                    <h2>函数列表</h2>
+                    <div class="function-list" id="functionList"></div>
+                </div>
+            </div>
+            <div class="resizer" id="resizer"></div>
+            <div class="right-panel" id="rightPanel">
+                <div class="card" style="padding: 16px;">
+                    <div class="canvas-wrap" id="canvasWrap">
+                        <canvas id="plotCanvas"></canvas>
+                        <div class="canvas-tooltip" id="canvasTooltip"></div>
+                        <div class="canvas-loading" id="canvasLoading">
+                            <div class="loading-spinner"></div>
+                            <div class="loading-text">加载帧数据中...</div>
+                        </div>
+                    </div>
+                    <div class="canvas-controls" id="imageControls">
+                        <button onclick="resetView()">重置视角</button>
+                        <button onclick="zoomIn()">放大 +</button>
+                        <button onclick="zoomOut()">缩小 −</button>
+                        <span class="zoom-info" id="zoomInfo"></span>
+                    </div>
+                    <div class="video-controls hide" id="videoControls">
+                        <button id="playPauseBtn" onclick="togglePlay()">▶ 播放</button>
+                        <div class="progress-wrap">
+                            <input type="range" id="frameSlider" min="0" max="0" value="0" oninput="seekFrame(this.value)">
+                            <span class="frame-info" id="frameInfo">0 / 0</span>
+                        </div>
+                        <div class="speed-control">
+                            <label>速度</label>
+                            <select id="playSpeed" onchange="updatePlaySpeed()">
+                                <option value="0.5">0.5x</option>
+                                <option value="1" selected>1x</option>
+                                <option value="2">2x</option>
+                                <option value="5">5x</option>
+                                <option value="10">10x</option>
+                                <option value="30">30x</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    let fileType = 'image';
+    let curveData = [];
+    let frameData = [];
+    let currentFrame = 0;
+    let isPlaying = false;
+    let playInterval = null;
+    let bounds = {};
+    let view = { xMin: 0, xMax: 10, yMin: 0, yMax: 10 };
+    let hoveredCurve = -1;
+    let isDragging = false;
+    let dragStart = null;
+    let videoFps = 30;
+    let playSpeed = 1;
+    let loadingStartTime = 0;
+    let loadingTimerInterval = null;
+
+    // Frame cache with LRU eviction
+    const MAX_MEMORY_FRAMES = 30; // Maximum frames to keep in memory
+    let frameCache = new Map(); // frameIdx -> frameData
+    let cacheAccessOrder = []; // LRU order: most recent at end
+
+    const padL = 50, padR = 15, padT = 15, padB = 35;
+    let plotScale = 1;
+    let plotOffsetX = 0, plotOffsetY = 0;
+
+    const uploadZone = document.getElementById('uploadZone');
+    const fileInput = document.getElementById('fileInput');
+    const imagePreview = document.getElementById('imagePreview');
+    const uploadPlaceholder = document.getElementById('uploadPlaceholder');
+    const canvas = document.getElementById('plotCanvas');
+    const ctx = canvas.getContext('2d');
+    const tooltip = document.getElementById('canvasTooltip');
+    const wrap = document.getElementById('canvasWrap');
+
+    // Detect CPU cores and memory from backend (real hardware info)
+    let systemInfo = { cpu_logical: 4, cpu_physical: 4, memory_total_gb: 8, memory_available_gb: 4 };
+    let currentCacheId = null;
+
+    async function detectHardware() {
+        try {
+            const resp = await fetch('/system_info/');
+            systemInfo = await resp.json();
+        } catch (e) {
+            console.warn('Failed to get system info from backend, using defaults');
+        }
+
+        const cores = systemInfo.cpu_logical || 4;
+        const totalMem = systemInfo.memory_total_gb || 8;
+        const workersInput = document.getElementById('numWorkers');
+        const info = document.getElementById('cpuInfo');
+        const memInfo = document.getElementById('memInfo');
+
+        // Set default workers to 75% of cores
+        const defaultWorkers = Math.min(Math.floor(cores * 0.75), cores);
+        workersInput.value = defaultWorkers;
+        workersInput.max = cores + 8;
+
+        info.innerHTML = `检测到 <span class="cores">${cores} 核</span> CPU (物理${systemInfo.cpu_physical || cores}核)`;
+        memInfo.innerHTML = `共 <span class="mem">${totalMem}GB</span> 内存`;
+    }
+
+    // Call on load
+    detectHardware();
+
+    function setFileType(type) {
+        fileType = type;
+        document.getElementById('btnImage').classList.toggle('active', type === 'image');
+        document.getElementById('btnVideo').classList.toggle('active', type === 'video');
+        document.getElementById('uploadIcon').textContent = type === 'image' ? '🖼️' : '🎬';
+        document.getElementById('uploadText').textContent = type === 'image' ? '点击或将图片拖拽到这里' : '点击或将视频拖拽到这里';
+        document.getElementById('uploadSubtext').textContent = type === 'image' ? '支持 JPG / PNG / BMP 格式' : '支持 MP4 / AVI / MOV 格式';
+        document.getElementById('fpsParam').classList.toggle('hide', type === 'image');
+        document.getElementById('workerParam').classList.toggle('hide', type === 'image');
+        document.getElementById('memParam').classList.toggle('hide', type === 'image');
+        document.getElementById('downsampleParam').classList.toggle('hide', type === 'image');
+        fileInput.accept = type === 'image' ? 'image/*' : 'video/*';
+        fileInput.value = '';
+        imagePreview.classList.add('hide');
+        uploadPlaceholder.classList.remove('hide');
+        uploadZone.classList.remove('has-image');
+    }
+
+    uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+    uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+    uploadZone.addEventListener('drop', e => {
+        e.preventDefault(); uploadZone.classList.remove('dragover');
+        if (e.dataTransfer.files.length) {
+            const f = e.dataTransfer.files[0];
+            if (fileType === 'video' && !f.type.startsWith('video/')) { alert('请上传视频文件'); return; }
+            if (fileType === 'image' && !f.type.startsWith('image/')) { alert('请上传图片文件'); return; }
+            fileInput.files = e.dataTransfer.files;
+            showPreview(e.dataTransfer.files[0]);
+        }
+    });
+    fileInput.addEventListener('change', () => { if (fileInput.files.length) showPreview(fileInput.files[0]); });
+
+    function showPreview(file) {
+        if (fileType === 'video') {
+            uploadPlaceholder.classList.add('hide');
+            imagePreview.classList.add('hide');
+            uploadZone.classList.add('has-image');
+            const text = document.getElementById('uploadText');
+            text.textContent = `已选择: ${file.name}`;
+            text.style.color = '#52c41a';
+            document.getElementById('uploadIcon').textContent = '✅';
+            document.getElementById('uploadSubtext').textContent = `${(file.size / 1024 / 1024).toFixed(2)} MB`;
+            uploadPlaceholder.classList.remove('hide');
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = e => {
+            imagePreview.src = e.target.result;
+            imagePreview.classList.remove('hide');
+            uploadPlaceholder.classList.add('hide');
+            uploadZone.classList.add('has-image');
+        };
+        reader.readAsDataURL(file);
+    }
+
+    async function getCookie(name) {
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) return parts.pop().split(';').shift();
+        return '';
+    }
+
+    function getCanvasSize() {
+        const rect = wrap.getBoundingClientRect();
+        const availW = rect.width - 2;
+        const xRange = view.xMax - view.xMin;
+        const yRange = view.yMax - view.yMin;
+        if (xRange <= 0 || yRange <= 0) return { w: availW, h: Math.floor(availW * 0.5) };
+
+        // Dynamic aspect ratio based on content - preserve original image/video aspect ratio
+        const contentRatio = yRange / xRange;
+        const minH = 180;
+        const maxH = Math.min(window.innerHeight * 0.65, 800);
+
+        let h = Math.floor(availW * contentRatio);
+
+        // Clamp height
+        if (h > maxH) {
+            // Height limited, recalculate width to maintain aspect ratio
+            h = maxH;
+        }
+        if (h < minH) {
+            h = minH;
+        }
+
+        return { w: availW, h };
+    }
+
+    function resizeCanvas() {
+        const { w, h } = getCanvasSize();
+        canvas.width = w;
+        canvas.height = h;
+        canvas.style.width = w + 'px';
+        canvas.style.height = h + 'px';
+        if (curveData.length || frameData.length) drawCanvas();
+    }
+
+    function toScreenX(x) {
+        return padL + plotOffsetX + (x - view.xMin) * plotScale;
+    }
+    function toScreenY(y) {
+        return (canvas.height - padB - plotOffsetY) - (y - view.yMin) * plotScale;
+    }
+
+    function computePlotLayout() {
+        const w = canvas.width, h = canvas.height;
+        const availW = w - padL - padR;
+        const availH = h - padT - padB;
+        const xRange = view.xMax - view.xMin;
+        const yRange = view.yMax - view.yMin;
+        if (xRange <= 0 || yRange <= 0) return;
+        const scaleX = availW / xRange;
+        const scaleY = availH / yRange;
+        plotScale = Math.min(scaleX, scaleY);
+        const usedW = plotScale * xRange;
+        const usedH = plotScale * yRange;
+        plotOffsetX = (availW - usedW) / 2;
+        plotOffsetY = (availH - usedH) / 2;
+    }
+
+    function niceStep(range) {
+        const roughStep = range / 6;
+        const mag = Math.pow(10, Math.floor(Math.log10(roughStep)));
+        const norm = roughStep / mag;
+        let nice;
+        if (norm < 1.5) nice = 1;
+        else if (norm < 3.5) nice = 2;
+        else if (norm < 7.5) nice = 5;
+        else nice = 10;
+        return nice * mag;
+    }
+
+    function drawCanvas() {
+        const w = canvas.width, h = canvas.height;
+        computePlotLayout();
+
+        const xRange = view.xMax - view.xMin;
+        const yRange = view.yMax - view.yMin;
+        if (xRange <= 0 || yRange <= 0) return;
+
+        const plotLeft = padL + plotOffsetX;
+        const plotRight = padL + plotOffsetX + plotScale * xRange;
+        const plotTop = padT + plotOffsetY;
+        const plotBottom = h - padB - plotOffsetY;
+
+        ctx.clearRect(0, 0, w, h);
+        ctx.fillStyle = '#fafafa';
+        ctx.fillRect(0, 0, w, h);
+
+        const xStep = niceStep(xRange);
+        const yStep = niceStep(yRange);
+        const xStart = Math.ceil(view.xMin / xStep) * xStep;
+        const yStart = Math.ceil(view.yMin / yStep) * yStep;
+
+        ctx.strokeStyle = '#e8e8e8';
+        ctx.lineWidth = 1;
+        for (let x = xStart; x <= view.xMax; x += xStep) {
+            const sx = toScreenX(x);
+            if (sx < plotLeft || sx > plotRight) continue;
+            ctx.beginPath(); ctx.moveTo(sx, plotTop); ctx.lineTo(sx, plotBottom); ctx.stroke();
+        }
+        for (let y = yStart; y <= view.yMax; y += yStep) {
+            const sy = toScreenY(y);
+            if (sy < plotTop || sy > plotBottom) continue;
+            ctx.beginPath(); ctx.moveTo(plotLeft, sy); ctx.lineTo(plotRight, sy); ctx.stroke();
+        }
+
+        ctx.strokeStyle = '#bbb';
+        ctx.lineWidth = 1;
+        if (view.xMin <= 0 && view.xMax >= 0) {
+            const sx = toScreenX(0);
+            if (sx >= plotLeft && sx <= plotRight) {
+                ctx.beginPath(); ctx.moveTo(sx, plotTop); ctx.lineTo(sx, plotBottom); ctx.stroke();
+            }
+        }
+        if (view.yMin <= 0 && view.yMax >= 0) {
+            const sy = toScreenY(0);
+            if (sy >= plotTop && sy <= plotBottom) {
+                ctx.beginPath(); ctx.moveTo(plotLeft, sy); ctx.lineTo(plotRight, sy); ctx.stroke();
+            }
+        }
+
+        ctx.fillStyle = '#333';
+        ctx.font = '10px -apple-system, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        for (let x = xStart; x <= view.xMax; x += xStep) {
+            const sx = toScreenX(x);
+            if (sx >= plotLeft && sx <= plotRight) ctx.fillText(formatNum(x), sx, plotBottom + 4);
+        }
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        for (let y = yStart; y <= view.yMax; y += yStep) {
+            const sy = toScreenY(y);
+            if (sy >= plotTop && sy <= plotBottom) ctx.fillText(formatNum(y), plotLeft - 6, sy);
+        }
+
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(plotLeft, plotTop, plotRight - plotLeft, plotBottom - plotTop);
+
+        const curves = frameData.length > 0 ? (frameData[currentFrame]?.curves || []) : curveData;
+        for (let i = 0; i < curves.length; i++) {
+            const curve = curves[i];
+            const color = curve.color || '#333333';
+            const isHovered = i === hoveredCurve;
+
+            ctx.beginPath();
+            ctx.strokeStyle = isHovered ? '#e74c3c' : color;
+            ctx.lineWidth = isHovered ? 3 : 2;
+            const xs = curve.x, ys = curve.y;
+            let started = false;
+            for (let j = 0; j < xs.length; j++) {
+                const sx = toScreenX(xs[j]);
+                const sy = toScreenY(ys[j]);
+                if (sx < plotLeft || sx > plotRight || sy < plotTop || sy > plotBottom) {
+                    started = false; continue;
+                }
+                if (!started) { ctx.moveTo(sx, sy); started = true; }
+                else ctx.lineTo(sx, sy);
+            }
+            ctx.stroke();
+        }
+
+        if (hoveredCurve >= 0 && hoveredCurve < curves.length) {
+            const c = curves[hoveredCurve];
+            tooltip.innerHTML = `<strong style="color:#e74c3c">Curve #${c.index}</strong><br>${c.expression}`;
+            tooltip.classList.add('visible');
+        } else {
+            tooltip.classList.remove('visible');
+        }
+
+        document.getElementById('zoomInfo').textContent =
+            `x:[${formatNum(view.xMin)},${formatNum(view.xMax)}] y:[${formatNum(view.yMin)},${formatNum(view.yMax)}]`;
+    }
+
+    function formatNum(v) {
+        if (Math.abs(v) >= 10000) return v.toFixed(0);
+        if (Math.abs(v) >= 100) return v.toFixed(0);
+        if (Math.abs(v) >= 10) return v.toFixed(1);
+        if (Math.abs(v) >= 1) return v.toFixed(1);
+        return v.toFixed(2);
+    }
+
+    function findNearestCurve(mx, my) {
+        const curves = frameData.length > 0 ? (frameData[currentFrame]?.curves || []) : curveData;
+        let best = -1;
+        let bestDist = 15;
+        for (let i = 0; i < curves.length; i++) {
+            const curve = curves[i];
+            for (let j = 0; j < curve.x.length; j += 5) {
+                const sx = toScreenX(curve.x[j]);
+                const sy = toScreenY(curve.y[j]);
+                const dx = mx - sx, dy = my - sy;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < bestDist) { bestDist = dist; best = i; }
+            }
+        }
+        return best;
+    }
+
+    canvas.addEventListener('mousemove', e => {
+        const rect = canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+
+        const prev = hoveredCurve;
+        hoveredCurve = findNearestCurve(mx * scaleX, my * scaleY);
+        if (prev !== hoveredCurve) drawCanvas();
+
+        if (isDragging && dragStart) {
+            const dx = (e.clientX - rect.left) - dragStart.x;
+            const dy = (e.clientY - rect.top) - dragStart.y;
+            const xShift = -dx / plotScale;
+            const yShift = dy / plotScale;
+            view.xMin = dragStart.xMin + xShift;
+            view.xMax = dragStart.xMax + xShift;
+            view.yMin = dragStart.yMin + yShift;
+            view.yMax = dragStart.yMax + yShift;
+            drawCanvas();
+        }
+    });
+
+    canvas.addEventListener('mouseleave', () => {
+        if (hoveredCurve >= 0) { hoveredCurve = -1; drawCanvas(); }
+        isDragging = false;
+    });
+
+    canvas.addEventListener('mousedown', e => {
+        const rect = canvas.getBoundingClientRect();
+        isDragging = true;
+        dragStart = {
+            x: e.clientX - rect.left, y: e.clientY - rect.top,
+            xMin: view.xMin, xMax: view.xMax,
+            yMin: view.yMin, yMax: view.yMax,
+        };
+    });
+
+    window.addEventListener('mouseup', () => { isDragging = false; dragStart = null; });
+
+    canvas.addEventListener('wheel', e => {
+        e.preventDefault();
+        const rect = canvas.getBoundingClientRect();
+        const mx = ((e.clientX - rect.left) / rect.width) * canvas.width;
+        const my = ((e.clientY - rect.top) / rect.height) * canvas.height;
+        const factor = e.deltaY > 0 ? 1.15 : 1 / 1.15;
+
+        const xRange = view.xMax - view.xMin;
+        const yRange = view.yMax - view.yMin;
+        const cx = view.xMin + (mx / canvas.width) * xRange;
+        const cy = view.yMax - (my / canvas.height) * yRange;
+
+        const newXRange = xRange * factor;
+        const newYRange = yRange * factor;
+        view.xMin = cx - (cx - view.xMin) * factor;
+        view.xMax = view.xMin + newXRange;
+        view.yMin = cy - (cy - view.yMin) * factor;
+        view.yMax = view.yMin + newYRange;
+        drawCanvas();
+    }, { passive: false });
+
+    function resetView() {
+        view.xMin = bounds.x_min;
+        view.xMax = bounds.x_max;
+        view.yMin = bounds.y_min;
+        view.yMax = bounds.y_max;
+        drawCanvas();
+    }
+
+    function zoomIn() {
+        const cx = (view.xMin + view.xMax) / 2;
+        const cy = (view.yMin + view.yMax) / 2;
+        const factor = 0.8;
+        view.xMin = cx + (view.xMin - cx) * factor;
+        view.xMax = cx + (view.xMax - cx) * factor;
+        view.yMin = cy + (view.yMin - cy) * factor;
+        view.yMax = cy + (view.yMax - cy) * factor;
+        drawCanvas();
+    }
+
+    function zoomOut() {
+        const cx = (view.xMin + view.xMax) / 2;
+        const cy = (view.yMin + view.yMax) / 2;
+        const factor = 1 / 0.8;
+        view.xMin = cx + (view.xMin - cx) * factor;
+        view.xMax = cx + (view.xMax - cx) * factor;
+        view.yMin = cy + (view.yMin - cy) * factor;
+        view.yMax = cy + (view.yMax - cy) * factor;
+        drawCanvas();
+    }
+
+    window.addEventListener('resize', resizeCanvas);
+
+    // Resizer drag functionality
+    const resizer = document.getElementById('resizer');
+    const leftPanel = document.getElementById('leftPanel');
+    const resultLayout = document.getElementById('resultLayout');
+    let isResizing = false;
+
+    resizer.addEventListener('mousedown', (e) => {
+        isResizing = true;
+        resizer.classList.add('dragging');
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        if (!isResizing) return;
+        const containerRect = resultLayout.getBoundingClientRect();
+        const newWidth = e.clientX - containerRect.left;
+        const minWidth = 180;
+        const maxWidth = containerRect.width - 300;
+        if (newWidth >= minWidth && newWidth <= maxWidth) {
+            leftPanel.style.width = newWidth + 'px';
+        }
+    });
+
+    window.addEventListener('mouseup', () => {
+        if (isResizing) {
+            isResizing = false;
+            resizer.classList.remove('dragging');
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            resizeCanvas();
+        }
+    });
+
+    function togglePlay() {
+        if (isPlaying) pause(); else play();
+    }
+
+    function play() {
+        const totalFrames = parseInt(document.getElementById('frameSlider').max) + 1;
+        if (totalFrames <= 1) return;
+        isPlaying = true;
+        document.getElementById('playPauseBtn').textContent = '⏸ 暂停';
+
+        // Calculate interval based on original video duration
+        const extractedFps = parseInt(document.getElementById('targetFps').value) || 3;
+        const frameDuration = 1000 / extractedFps;
+        const actualInterval = frameDuration / playSpeed;
+
+        playInterval = setInterval(() => {
+            currentFrame = (currentFrame + 1) % totalFrames;
+
+            // Try to get frame from memory cache first (sync)
+            const cachedFrame = getCachedFrame(currentFrame);
+            if (cachedFrame) {
+                frameData[currentFrame] = cachedFrame;
+                document.getElementById('frameSlider').value = currentFrame;
+                document.getElementById('frameInfo').textContent = `${currentFrame + 1} / ${totalFrames}`;
+                drawCanvas();
+                updateFunctionList();
+                updateFrameStats();
+            } else {
+                // Frame not in memory, show loading and load async
+                const loadingEl = document.getElementById('canvasLoading');
+                loadingEl.classList.add('active');
+
+                loadFrameFromCache(currentFrame).then(frame => {
+                    if (frame) {
+                        frameData[currentFrame] = frame;
+                        document.getElementById('frameSlider').value = currentFrame;
+                        document.getElementById('frameInfo').textContent = `${currentFrame + 1} / ${totalFrames}`;
+                        drawCanvas();
+                        updateFunctionList();
+                        updateFrameStats();
+                    }
+                    loadingEl.classList.remove('active');
+                });
+            }
+
+            // Preload next few frames in background (don't await)
+            preloadAdjacentFrames(currentFrame, totalFrames);
+        }, actualInterval);
+    }
+
+    function updatePlaySpeed() {
+        playSpeed = parseFloat(document.getElementById('playSpeed').value) || 1;
+        if (isPlaying) {
+            pause();
+            play();
+        }
+    }
+
+    function pause() {
+        isPlaying = false;
+        document.getElementById('playPauseBtn').textContent = '▶ 播放';
+        if (playInterval) { clearInterval(playInterval); playInterval = null; }
+    }
+
+    async function seekFrame(idx) {
+        pause();
+        const totalFrames = parseInt(document.getElementById('frameSlider').max) + 1;
+        currentFrame = Math.max(0, Math.min(totalFrames - 1, parseInt(idx)));
+        await updateFrameDisplay();
+    }
+
+    const PRELOAD_COUNT = 5; // Preload 5 frames ahead and behind
+
+    async function updateFrameDisplay(showLoading = true) {
+        document.getElementById('frameSlider').value = currentFrame;
+        const totalFrames = parseInt(document.getElementById('frameSlider').max) + 1;
+        document.getElementById('frameInfo').textContent = `${currentFrame + 1} / ${totalFrames}`;
+
+        const loadingEl = document.getElementById('canvasLoading');
+
+        // Try memory cache first
+        const cachedFrame = getCachedFrame(currentFrame);
+        if (cachedFrame) {
+            frameData[currentFrame] = cachedFrame;
+        } else if (!frameData[currentFrame] && currentCacheId) {
+            // Load from disk
+            if (showLoading) loadingEl.classList.add('active');
+            frameData[currentFrame] = await loadFrameFromCache(currentFrame);
+            if (showLoading) loadingEl.classList.remove('active');
+        }
+
+        drawCanvas();
+        updateFunctionList();
+        updateFrameStats();
+
+        // Preload adjacent frames in background
+        preloadAdjacentFrames(currentFrame, totalFrames);
+    }
+
+    async function preloadAdjacentFrames(centerIdx, totalFrames) {
+        if (!currentCacheId) return;
+
+        // Preload ahead first (for playing forward), then behind
+        const aheadIndices = [];
+        const behindIndices = [];
+
+        for (let i = 1; i <= PRELOAD_COUNT; i++) {
+            if (centerIdx + i < totalFrames) aheadIndices.push(centerIdx + i);
+            if (centerIdx - i >= 0) behindIndices.push(centerIdx - i);
+        }
+
+        // Load ahead frames first (priority for forward playback)
+        for (const idx of aheadIndices) {
+            if (!getCachedFrame(idx) && !frameData[idx]) {
+                const frame = await loadFrameFromCache(idx);
+                if (frame) frameData[idx] = frame;
+            }
+        }
+
+        // Then load behind frames
+        for (const idx of behindIndices) {
+            if (!getCachedFrame(idx) && !frameData[idx]) {
+                const frame = await loadFrameFromCache(idx);
+                if (frame) frameData[idx] = frame;
+            }
+        }
+    }
+
+    let currentVideoInfo = { image_size: '', processed_size: '' };
+
+    function updateFrameStats() {
+        const totalFrames = parseInt(document.getElementById('frameSlider').max) + 1;
+        if (totalFrames === 0) return;
+        const frame = frameData[currentFrame];
+        const totalContours = frame ? frame.total_contours : 0;
+        const fittedContours = frame ? frame.fitted_contours : 0;
+
+        // Show resolution info
+        const sizeDisplay = currentVideoInfo.processed_size && currentVideoInfo.processed_size !== currentVideoInfo.image_size
+            ? `${currentVideoInfo.image_size} → ${currentVideoInfo.processed_size}`
+            : (currentVideoInfo.image_size || '-');
+
+        document.getElementById('summaryContainer').innerHTML = `
+            <div class="summary-item"><div class="value">${totalContours}</div><div class="label">检测轮廓</div></div>
+            <div class="summary-item"><div class="value">${fittedContours}</div><div class="label">拟合函数</div></div>
+            <div class="summary-item"><div class="value">${currentFrame + 1} / ${totalFrames}</div><div class="label">当前帧</div></div>
+            <div class="summary-item"><div class="value">${sizeDisplay}</div><div class="label">分辨率</div></div>
+        `;
+    }
+
+    function updateFunctionList() {
+        if (frameData.length === 0 && curveData.length === 0) return;
+        const curves = frameData.length > 0 ? (frameData[currentFrame]?.curves || []) : curveData;
+        let legendHtml = '';
+        curves.forEach((f, idx) => {
+            const color = f.color || '#333333';
+            legendHtml += `
+                <div class="legend-item" onmouseenter="hoverCurve(${idx})" onmouseleave="unhoverCurve()">
+                    <span class="legend-swatch" style="background:${color}"></span>
+                    <span class="legend-label"><code>${f.expression}</code></span>
+                </div>
+            `;
+        });
+        document.getElementById('functionList').innerHTML = legendHtml;
+    }
+
+    let currentProcessingFrame = 0;
+    let totalProcessingFrames = 0;
+
+    function startLoadingTimer(totalFrames) {
+        loadingStartTime = Date.now();
+        currentProcessingFrame = 0;
+        totalProcessingFrames = totalFrames || 0;
+        const timerEl = document.getElementById('loadingTimer');
+        const progressEl = document.getElementById('loadingProgress');
+        timerEl.innerHTML = '已用时: <span class="elapsed">0.0s</span>';
+        if (totalFrames > 0) {
+            progressEl.textContent = `准备处理 ${totalFrames} 帧...`;
+        } else {
+            progressEl.textContent = '处理中...';
+        }
+        loadingTimerInterval = setInterval(() => {
+            const elapsed = (Date.now() - loadingStartTime) / 1000;
+            timerEl.innerHTML = `已用时: <span class="elapsed">${elapsed.toFixed(1)}s</span>`;
+        }, 100);
+    }
+
+    function updateLoadingProgress(frameIdx, total) {
+        currentProcessingFrame = frameIdx;
+        const progressEl = document.getElementById('loadingProgress');
+        if (total > 0) {
+            const pct = Math.round((frameIdx / total) * 100);
+            progressEl.textContent = `正在处理第 ${frameIdx}/${total} 帧 (${pct}%)`;
+        }
+    }
+
+    function stopLoadingTimer() {
+        if (loadingTimerInterval) {
+            clearInterval(loadingTimerInterval);
+            loadingTimerInterval = null;
+        }
+    }
+
+    async function processFile() {
+        const file = fileInput.files[0];
+        if (!file) { alert('请先选择文件'); return; }
+
+        const btn = document.getElementById('processBtn');
+        const loading = document.getElementById('loadingIndicator');
+        const resultArea = document.getElementById('resultArea');
+
+        btn.disabled = true;
+        loading.classList.add('active');
+        resultArea.classList.remove('active');
+        pause();
+        curveData = [];
+        frameData = [];
+        currentFrame = 0;
+        startLoadingTimer(0);
+
+        const formData = new FormData();
+        formData.append(fileType, file);
+        formData.append('min_length', document.getElementById('minLength').value);
+        formData.append('smoothing', document.getElementById('smoothing').value);
+        formData.append('max_contours', document.getElementById('maxContours').value);
+        if (fileType === 'video') {
+            formData.append('target_fps', document.getElementById('targetFps').value);
+            formData.append('num_workers', document.getElementById('numWorkers').value);
+            const memPercent = parseInt(document.getElementById('memLimit').value) || 50;
+            formData.append('mem_limit', (memPercent / 100).toFixed(2));
+            formData.append('downsample', document.getElementById('downsample').value);
+        }
+
+        try {
+            const csrfToken = await getCookie('csrftoken');
+
+            // Use SSE streaming for real-time progress
+            const response = await fetch('/upload_stream/', {
+                method: 'POST', body: formData,
+                headers: { 'X-CSRFToken': csrfToken }
+            });
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+
+                if (value) {
+                    buffer += decoder.decode(value, { stream: !done });
+                }
+
+                // Process complete SSE messages (separated by double newline)
+                while (true) {
+                    const msgEnd = buffer.indexOf('\n\n');
+                    if (msgEnd === -1) break;
+
+                    const message = buffer.substring(0, msgEnd);
+                    buffer = buffer.substring(msgEnd + 2);
+
+                    // Parse SSE data lines
+                    for (const line of message.split('\n')) {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(line.slice(6));
+                                handleStreamData(data);
+                            } catch (e) {
+                                console.warn('Failed to parse SSE data:', line, e);
+                            }
+                        }
+                    }
+                }
+
+                if (done) break;
+            }
+        } catch (err) {
+            alert('请求失败: ' + err.message);
+        } finally {
+            btn.disabled = false;
+            loading.classList.remove('active');
+            stopLoadingTimer();
+        }
+    }
+
+    function handleStreamData(data) {
+        const progressEl = document.getElementById('loadingProgress');
+
+        if (data.type === 'status') {
+            progressEl.textContent = data.message;
+            if (data.total_frames) {
+                totalProcessingFrames = data.total_frames;
+            }
+        } else if (data.type === 'progress') {
+            const pct = Math.round((data.current / data.total) * 100);
+            progressEl.textContent = `正在处理第 ${data.current}/${data.total} 帧 (${pct}%)`;
+        } else if (data.type === 'complete') {
+            progressEl.textContent = '正在保存结果...';
+            displayResult(data);
+        } else if (data.type === 'error') {
+            alert('处理失败: ' + data.message);
+        }
+    }
+
+    // Cache management functions
+    function getCachedFrame(frameIdx) {
+        if (frameCache.has(frameIdx)) {
+            // Update LRU order
+            const idx = cacheAccessOrder.indexOf(frameIdx);
+            if (idx > -1) {
+                cacheAccessOrder.splice(idx, 1);
+            }
+            cacheAccessOrder.push(frameIdx);
+            return frameCache.get(frameIdx);
+        }
+        return null;
+    }
+
+    function setCachedFrame(frameIdx, data) {
+        if (!data) return;
+
+        // If cache is full, evict oldest
+        while (cacheAccessOrder.length >= MAX_MEMORY_FRAMES) {
+            const oldestIdx = cacheAccessOrder.shift();
+            frameCache.delete(oldestIdx);
+        }
+
+        frameCache.set(frameIdx, data);
+        cacheAccessOrder.push(frameIdx);
+    }
+
+    function clearFrameCache() {
+        frameCache.clear();
+        cacheAccessOrder = [];
+    }
+
+    async function loadFrameFromCache(frameIdx) {
+        // Check memory cache first
+        const cached = getCachedFrame(frameIdx);
+        if (cached) return cached;
+
+        if (!currentCacheId) return null;
+        try {
+            const resp = await fetch(`/get_frame/?cache_id=${currentCacheId}&frame_idx=${frameIdx}`);
+            const data = await resp.json();
+            if (data.success) {
+                // Store in memory cache
+                setCachedFrame(frameIdx, data.frame);
+                return data.frame;
+            }
+        } catch (e) {
+            console.warn('Failed to load frame', frameIdx, e);
+        }
+        return null;
+    }
+
+    async function displayResult(data) {
+        const resultArea = document.getElementById('resultArea');
+        bounds = data.bounds;
+        view.xMin = bounds.x_min;
+        view.xMax = bounds.x_max;
+        view.yMin = bounds.y_min;
+        view.yMax = bounds.y_max;
+
+        const summary = data.summary;
+        const sizeLabel = data.is_video ? '视频尺寸' : '图片尺寸';
+        const sizeDisplay = summary.processed_size && summary.processed_size !== summary.image_size
+            ? `${summary.image_size} → ${summary.processed_size}`
+            : summary.image_size;
+
+        // Build time display
+        let timeDisplay = `${summary.processing_time}s`;
+        if (data.is_video && summary.avg_time_per_frame > 0) {
+            timeDisplay += `<br><span style="font-size:10px;color:#888">${summary.avg_time_per_frame}s/帧</span>`;
+        }
+
+        document.getElementById('summaryContainer').innerHTML = `
+            <div class="summary-item"><div class="value">${summary.total_contours}</div><div class="label">检测轮廓</div></div>
+            <div class="summary-item"><div class="value">${summary.fitted_contours}</div><div class="label">拟合函数</div></div>
+            <div class="summary-item"><div class="value">${sizeDisplay}</div><div class="label">${sizeLabel}</div></div>
+            <div class="summary-item"><div class="value">${timeDisplay}</div><div class="label">总处理时间</div></div>
+        `;
+
+        if (data.is_video) {
+            currentCacheId = data.cache_id;
+            frameData = []; // Don't load all frames at once
+            clearFrameCache(); // Clear previous cache
+            currentFrame = 0;
+            videoFps = data.video_fps || 30;
+            currentVideoInfo = {
+                image_size: data.summary?.image_size || '',
+                processed_size: data.summary?.processed_size || ''
+            };
+            document.getElementById('imageControls').classList.add('hide');
+            document.getElementById('videoControls').classList.remove('hide');
+            document.getElementById('frameSlider').max = data.frame_count - 1;
+            document.getElementById('frameSlider').value = 0;
+            document.getElementById('frameInfo').textContent = `1 / ${data.frame_count}`;
+
+            // Preload first frame and cache it
+            const firstFrame = await loadFrameFromCache(0);
+            if (firstFrame) {
+                frameData[0] = firstFrame;
+                drawCanvas();
+                updateFunctionList();
+            }
+
+            // Preload next few frames into memory cache
+            const totalFrames = data.frame_count;
+            for (let i = 1; i < Math.min(PRELOAD_COUNT * 2, totalFrames); i++) {
+                loadFrameFromCache(i).then(frame => {
+                    if (frame) frameData[i] = frame;
+                });
+            }
+
+            updateFrameStats();
+        } else {
+            curveData = data.curves;
+            frameData = [];
+            document.getElementById('imageControls').classList.remove('hide');
+            document.getElementById('videoControls').classList.add('hide');
+            updateFunctionList();
+        }
+
+        requestAnimationFrame(() => {
+            resizeCanvas();
+        });
+        resultArea.classList.add('active');
+    }
+
+    function hoverCurve(idx) { hoveredCurve = idx; drawCanvas(); }
+    function unhoverCurve() { hoveredCurve = -1; drawCanvas(); }
+</script>
+
+</body>
+</html>

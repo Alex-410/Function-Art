@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environment
+venv/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment variables
+.env
+.env.local
+backend/.env
+
+# Database
+backend/db.sqlite3
+
+# RAG data
+backend/rag_data/
+
+# Claude
+.claude/
+CLAUDE.md
+**/CLAUDE.md
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Build output
+backend/static/dist/
